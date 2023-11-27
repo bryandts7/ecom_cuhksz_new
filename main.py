@@ -433,6 +433,62 @@ def updateProfile():
         con.close()
         return redirect(url_for('editProfile'))
 
+@app.route("/addToCart")
+def addToCart():
+    if 'email' not in session:
+        return redirect(url_for('loginForm'))
+    else:
+        productId = int(request.args.get('productId'))
+        with sqlite3.connect('database.db') as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+            userId = cur.fetchone()[0]
+            try:
+                cur.execute("INSERT INTO cart (userId, productId) VALUES (?, ?)", (userId, productId))
+                conn.commit()
+                msg = "Added successfully"
+            except:
+                conn.rollback()
+                msg = "Error occured"
+        conn.close()
+        return redirect(url_for('root'))
+
+@app.route("/cart")
+def cart():
+    if 'email' not in session:
+        return redirect(url_for('loginForm'))
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    email = session['email']
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
+        userId = cur.fetchone()[0]
+        cur.execute("SELECT products.productId, products.name, products.price, products.image FROM products, cart WHERE products.productId = cart.productId AND cart.userId = ?", (userId, ))
+        products = cur.fetchall()
+    totalPrice = 0
+    for row in products:
+        totalPrice += row[2]
+    return render_template("cart.html", products = products, totalPrice=totalPrice, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems)
+
+@app.route("/removeFromCart")
+def removeFromCart():
+    if 'email' not in session:
+        return redirect(url_for('loginForm'))
+    email = session['email']
+    productId = int(request.args.get('productId'))
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
+        userId = cur.fetchone()[0]
+        try:
+            cur.execute("DELETE FROM cart WHERE userId = ? AND productId = ?", (userId, productId))
+            conn.commit()
+            msg = "removed successfully"
+        except:
+            conn.rollback()
+            msg = "error occured"
+    conn.close()
+    return redirect(url_for('root'))
 
 if __name__ == '__main__':
     app.run(debug=True)

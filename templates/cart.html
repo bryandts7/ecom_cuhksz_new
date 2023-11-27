@@ -52,16 +52,19 @@
 				<a href="/removeFromCart?productId={{row[0]}}">Remove</a>
 			</div>
 			<div id="itemPrice">
-				${{row[2]}}
+				¥{{row[2]}}
 				<br>
+				Quantity: {{row[4]}}
 				<br>
-				<a href="/checkout">Proceed to checkout</a>
+				Total Price: ¥{{row[2] * row[4]}}
+				<br>
+				<a href="/checkout?productId={{row[0]}}&quantity={{row[4]}}">Proceed to checkout</a>
 			</div>
 		</div>
 		{% endfor %}
 		<hr id="seperator">
 		<div id="total">
-			<span id="subtotal">Subtotal</span> : ${{totalPrice}}
+			<span id="subtotal">Subtotal</span> : ¥{{totalPrice}}
 		</div>
 	</div>
 </div>

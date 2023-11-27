@@ -66,9 +66,12 @@
 		<h2>Description</h2>
 		<p>{{data[3]}}</p>
 	</div>
+	{% if not sameSeller %}
 	<div id="addToCart">
 		<a href="/addToCart?productId={{request.args.get('productId')}}">Add to Cart</a>
 	</div>
+	{% else %}
+	{% endif %}
 </div>
 </body>
 </html>

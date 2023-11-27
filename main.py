@@ -1,6 +1,7 @@
 from flask import *
 import sqlite3, hashlib, os
 from werkzeug.utils import secure_filename
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'random string'
@@ -80,6 +81,9 @@ def root():
     loggedIn, firstName, noOfItems = getLoginDetails()
     sellerStatus = getSellerStatus()
     query = request.args.get('searchQuery')
+    msg = request.args.get('msg')
+    if msg is None:
+        msg = False
     if query is None:
         with sqlite3.connect('database.db') as conn:
             cur = conn.cursor()
@@ -94,7 +98,7 @@ def root():
             cur.execute('SELECT categoryId, name FROM categories')
             categoryData = cur.fetchall()
         itemData = parse(itemData)   
-        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, sellerStatus=sellerStatus)
+        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, sellerStatus=sellerStatus, msg=msg)
     else:
         with sqlite3.connect('database.db') as conn:
             cur = conn.cursor()
@@ -109,7 +113,7 @@ def root():
             cur.execute('SELECT categoryId, name FROM categories')
             categoryData = cur.fetchall()
         itemData = parse(itemData)   
-        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, query=query, sellerStatus=sellerStatus)
+        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, query=query, sellerStatus=sellerStatus, msg=msg)
 
 @app.route("/registrationForm")
 def registrationForm():
@@ -271,13 +275,24 @@ def displayCategory():
 def productDescription():
     loggedIn, firstName, noOfItems = getLoginDetails()
     sellerStatus = getSellerStatus()
+    sameSeller = False
     productId = request.args.get('productId')
     with sqlite3.connect('database.db') as conn:
         cur = conn.cursor()
-        cur.execute('SELECT productId, name, price, description, image, stock FROM products WHERE productId = ?', (productId, ))
+        cur.execute('SELECT productId, name, price, description, image, stock, sellerId FROM products WHERE productId = ?', (productId, ))
         productData = cur.fetchone()
+        productSeller = productData[6]
+    if sellerStatus:
+        with sqlite3.connect('database.db') as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT userId, sellerId FROM users WHERE email = ?", (session['email'], ))
+            userId, sellerId= cur.fetchone()
+            if sellerId == productSeller:
+                sameSeller = True
+            else:
+                sameSeller = False
     conn.close()
-    return render_template("productDescription.html", data=productData, loggedIn = loggedIn, firstName = firstName, noOfItems = noOfItems, sellerStatus=sellerStatus)
+    return render_template("productDescription.html", data=productData, loggedIn = loggedIn, firstName = firstName, noOfItems = noOfItems, sellerStatus=sellerStatus, sameSeller=sameSeller)
 
 @app.route("/editProduct")
 def editProduct():
@@ -443,15 +458,34 @@ def addToCart():
             cur = conn.cursor()
             cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
             userId = cur.fetchone()[0]
-            try:
-                cur.execute("INSERT INTO cart (userId, productId) VALUES (?, ?)", (userId, productId))
-                conn.commit()
-                msg = "Added successfully"
-            except:
-                conn.rollback()
-                msg = "Error occured"
+            cur.execute("SELECT * FROM cart WHERE userId = ? AND productId = ?", (userId, productId))
+            existingData = cur.fetchone()
+            if (existingData == None):
+                try:
+                    cur.execute("INSERT INTO cart (userId, productId, quantity) VALUES (?, ?, ?)", (userId, productId, 1))
+                    conn.commit()
+                    msg = "Added successfully"
+                except:
+                    conn.rollback()
+                    msg = "Error occured"
+            else:
+                quantity = existingData[2]
+                cur.execute("SELECT stock FROM products WHERE productId = ?", (productId,))
+                stock = cur.fetchone()[0]
+                if quantity < stock:
+                    try:
+                        cur.execute("UPDATE cart SET quantity = ? WHERE userId = ? AND productId = ?", (existingData[2]+1, userId, productId))
+                        conn.commit()
+                        msg = "Added successfully"
+                    except:
+                        conn.rollback()
+                        msg = "Error occured"
+                else:
+                    conn.commit()
+                    msg = "Cart reached maximum stock"
+
         conn.close()
-        return redirect(url_for('root'))
+        return redirect(url_for('root', msg=msg))
 
 @app.route("/cart")
 def cart():
@@ -463,11 +497,11 @@ def cart():
         cur = conn.cursor()
         cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
         userId = cur.fetchone()[0]
-        cur.execute("SELECT products.productId, products.name, products.price, products.image FROM products, cart WHERE products.productId = cart.productId AND cart.userId = ?", (userId, ))
+        cur.execute("SELECT products.productId, products.name, products.price, products.image, cart.quantity FROM products, cart WHERE products.productId = cart.productId AND cart.userId = ?", (userId, ))
         products = cur.fetchall()
     totalPrice = 0
     for row in products:
-        totalPrice += row[2]
+        totalPrice += row[2]*row[4]
     return render_template("cart.html", products = products, totalPrice=totalPrice, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems)
 
 @app.route("/removeFromCart")
@@ -489,6 +523,30 @@ def removeFromCart():
             msg = "error occured"
     conn.close()
     return redirect(url_for('root'))
+
+@app.route("/checkout")
+def checkout():
+    email = session['email']
+    productId = int(request.args.get('productId'))
+    quantity = int(request.args.get('quantity'))
+    with sqlite3.connect('database.db') as conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
+            customerId = cur.fetchone()[0]
+            cur.execute("INSERT INTO orders (customerId, productId, quantity, orderStatus, orderDate) VALUES (?, ?, ?, ?, ?)", (customerId, productId, quantity, "Unpaid", datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
+            cur.execute("DELETE FROM cart WHERE userId = ? AND productId = ?", (customerId, productId))
+            cur.execute("SELECT stock FROM products WHERE productId = ?", (productId,))
+            stock = cur.fetchone()[0]
+            cur.execute("UPDATE products SET stock = ? WHERE productId = ?", (stock - quantity, productId))
+            conn.commit()
+            msg = "Checkout Success, please see 'Your Order' page to pay your order."
+        except:
+            conn.rollback()
+            msg = "error occured"
+
+    return redirect(url_for('root', msg=msg))
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -1,0 +1,48 @@
+<html>
+<head>
+<title>Registration</title>
+<script type="text/javascript" src="{{ url_for('static', filename = 'js/validateForm.js') }}">
+</script>
+</head>
+<body>
+<form action="/register" method="POST" enctype="multipart/form-data" onsubmit="return validate()">
+    <p>Email: <input type="email" name="email"></p>
+
+    <P>Password: <input type="password" name="password" id="password" required></p>
+
+    <p>Confirm Password: <input type="password" name="cpassword" id="cpassword"></p>
+
+    <p>First Name: <input type="text" name="firstName"></p>
+    <p>Last Name: <input type="text" name="lastName"></p>
+    <p>College: 
+        <select name="address1">
+          {% for row in collegeBuildingData %}
+            <option>{{ row[0] }}</option>
+          {% endfor %}
+        </select>
+      </p >
+    <p>Phone Number: <input type="text" name="phone"></p>
+    <p>WeChat ID: <input type="text" name="weChatId"></p>
+        <label for="seller">Become a Seller?</label>
+        <input type="checkbox" id="seller" name="seller" onclick="toggleSellerFields()"><br>
+
+        <div id="sellerFields" style="display:none;">
+            <label for="payCodeImage">Upload WeChat Pay Barcode Image:</label>
+            <input type="file" id="payCodeImage" name="payCodeImage"><br>
+        </div>
+
+    <p><input type="submit" value="Register"></p>
+
+    <a href="/loginForm">Login here</a>
+</form>
+<script>
+    function toggleSellerFields() {
+        var sellerFields = document.getElementById('sellerFields');
+        sellerFields.style.display = document.getElementById('seller').checked ? 'block' : 'none';
+    }
+</script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,23 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<title>Admin</title>
+</head>
+<body>
+<h2>Edit items</h2>
+<form action="/updateProduct" method="POST" enctype="multipart/form-data">
+	Name: <input type="text" name="name" value={{data[1]}}><br>
+	Price: <input type="text" name="price" value={{data[2]}}><br>
+	Description: <textarea name="description" rows=3 cols="40" value={{data[3]}}></textarea><br>
+	Image: <input type="file" name="image" value={{data[4]}}><br>
+	Stock: <input type="text" name="stock" value={{data[5]}}><br>
+	Category: <select name="category">
+		{% for row in categories %}
+			<option value="{{row[0]}}">{{row[1]}}</option>
+		{% endfor %}
+	</select><br>
+	<input type="submit" value="Save">
+</form>
+</body>
+</html>
+

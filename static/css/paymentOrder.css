@@ -1,0 +1,15 @@
+/* Set up a two-column layout */
+.container {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Style for each column */
+.column {
+    width: 48%; /* Adjust as needed */
+}
+
+/* Optional: Add margin for better spacing */
+.column {
+    margin: 0 1%; /* Adjust as needed */
+}

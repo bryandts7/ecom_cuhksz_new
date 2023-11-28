@@ -61,7 +61,7 @@
 				{% for row in unpaidOrders %}
 				<td>
 					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" /> <br>
-					<a href="/payOrder?orderId={{row[0]}}"><h6>Pay Order</h6></a>
+					<a href="/payOrder?orderId={{row[0]}}"><h4 >Pay Order</h4></a>
 				</td>
 				{% endfor %}
 			</tr>

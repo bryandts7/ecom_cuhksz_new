@@ -282,6 +282,8 @@ def productDescription():
         cur.execute('SELECT productId, name, price, description, image, stock, sellerId FROM products WHERE productId = ?', (productId, ))
         productData = cur.fetchone()
         productSeller = productData[6]
+        cur.execute('SELECT firstName, lastName FROM users WHERE sellerId = ?', (productSeller,))
+        productSellerName = cur.fetchone()
     if sellerStatus:
         with sqlite3.connect('database.db') as conn:
             cur = conn.cursor()
@@ -292,7 +294,7 @@ def productDescription():
             else:
                 sameSeller = False
     conn.close()
-    return render_template("productDescription.html", data=productData, loggedIn = loggedIn, firstName = firstName, noOfItems = noOfItems, sellerStatus=sellerStatus, sameSeller=sameSeller)
+    return render_template("productDescription.html", data=productData, loggedIn = loggedIn, firstName = firstName, noOfItems = noOfItems, sellerStatus=sellerStatus, sameSeller=sameSeller, productSellerName=productSellerName)
 
 @app.route("/editProduct")
 def editProduct():
@@ -562,7 +564,45 @@ def orders():
         cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Delivered"))
         deliveredOrders = cur.fetchall()
     return render_template("order.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders)
-    
+
+@app.route("/payOrder")
+def payOrder():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT orders.orderId, orders.quantity, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.orderId = ?", (orderId, ))
+        data = cur.fetchone()
+    return render_template("paymentOrder.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, data=data)
+
+@app.route("/submitPayment", methods = ['GET', 'POST'])
+def submitPayment():
+    if request.method == 'POST':
+        #Parse form data    
+        orderId = int(request.form['orderId'])
+        proofPayment = request.files['proofPayment']
+        if proofPayment and allowed_file(proofPayment.filename):
+            filename = secure_filename(proofPayment.filename)
+            proofPayment.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        imagename = filename
+        
+    with sqlite3.connect('database.db') as con:
+        try:                    
+            cur = con.cursor()
+            cur.execute('INSERT INTO order_payment (status, paymentProof) VALUES (?, ?)', (1, imagename))
+            cur.execute('SELECT ordPayId FROM order_payment ORDER BY ordPayId DESC LIMIT 1')
+            ordPayId = cur.fetchone()[0]
+            cur.execute('UPDATE orders SET ordPayId = ?, orderStatus = ? WHERE orderId = ?', (ordPayId, "Paid", orderId))
+            con.commit()
+            msg = "You have successfully paid your order. Please contact the seller at 'Your Order' page."
+        except:
+            con.rollback()
+            msg = "Error occured"
+    con.close()
+    return redirect(url_for('root', msg=msg))
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)

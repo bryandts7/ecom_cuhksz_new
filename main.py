@@ -547,6 +547,22 @@ def checkout():
 
     return redirect(url_for('root', msg=msg))
 
+@app.route("/account/orders")
+def orders():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+        userId = cur.fetchone()[0]
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Unpaid"))
+        unpaidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Paid"))
+        paidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Delivered"))
+        deliveredOrders = cur.fetchall()
+    return render_template("order.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders)
+    
 
 if __name__ == '__main__':
     app.run(debug=True)

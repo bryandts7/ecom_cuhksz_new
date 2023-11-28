@@ -1,0 +1,113 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<title>Your Order</title>
+<link rel="stylesheet" href={{ url_for('static', filename='css/home.css') }} />
+<link rel="stylesheet" href={{ url_for('static', filename='css/topStyle.css') }} />
+</head>
+<body>
+<div id="title">
+	<a href="/">
+		<img id="logo" src= {{ url_for('static', filename='images/logo.png') }} />
+	</a>
+	<form>
+		<input id="searchBox" type="text" name="searchQuery" value="{{query}}">
+		<input id="searchButton" type="submit" value="Search">
+	</form>
+
+	{% if not loggedIn %}
+	<div id="signInButton">
+		<a class="link" href="/loginForm">Sign In</a>
+	</div>
+	{% else %}
+	<div class="dropdown">
+		<button class="dropbtn">Hello, <br>{{firstName}}</button>
+		<div class="dropdown-content">
+			<a href="/account/orders">Your orders</a>
+			<a href="/account/profile">Your profile</a>
+			{% if sellerStatus %}
+			<a href="/account/products">Your products</a>
+			<a href="/account/selling">Your sellings</a>
+			{% else %}
+			{% endif %}
+			<hr>
+			<a href="/logout">Sign Out</a>
+		</div>
+	</div>
+	{% endif %}
+	<div id="kart">
+		<a class="link" href="/cart">
+			<img src={{url_for('static', filename='images/shoppingCart.png')}} id="cartIcon" />
+			CART {{noOfItems}}
+		</a>
+	</div>
+</div>
+
+<div class="display">
+	<div class="displayCategory">
+		<h1>Your Orders: </h1>
+	</div>
+	<div>
+		<h2>Unpaid Orders</h2>
+		<table>
+			<tr id="productName">
+				{% for row in unpaidOrders %}
+				<td>
+					{{row[4]}}
+				</td>
+				{% endfor %}
+			</tr>
+			<tr id="productImage">
+				{% for row in unpaidOrders %}
+				<td>
+					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" /> <br>
+					<a href="/payOrder?orderId={{row[0]}}"><h6>Pay Order</h6></a>
+				</td>
+				{% endfor %}
+			</tr>
+			<tr id="productPrice">
+				{% for row in unpaidOrders %}
+				<td>
+					Quantity :{{row[2]}} <br>
+                    Total Price: ¥{{row[2]*row[5]}} ({{row[5]}}/pcs)
+				</td>
+
+				{% endfor %}
+			</tr>
+		</table>
+	</div>
+
+    <div>
+		<h2>Paid Orders</h2>
+		<table>
+			<tr id="productName">
+				{% for row in paidOrders %}
+				<td>
+					{{row[4]}}
+				</td>
+				{% endfor %}
+			</tr>
+			<tr id="productImage">
+				{% for row in paidOrders %}
+				<td>
+					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" />
+					<a href="/xxx?orderId={{row[0]}}"><h6>Contact the Seller for Meet Up</h6></a>
+				</td>
+				{% endfor %}
+			</tr>
+			<tr id="productPrice">
+				{% for row in paidOrders %}
+				<td>
+					Quantity :{{row[2]}} <br>
+                    Total Price: ¥{{row[2]*row[5]}} ({{row[5]}}/pcs)
+				</td>
+
+				{% endfor %}
+			</tr>
+		</table>
+	</div>
+
+</div>
+
+</body>
+</html>

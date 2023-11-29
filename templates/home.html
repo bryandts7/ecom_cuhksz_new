@@ -45,6 +45,10 @@
 </div>
 <div class="display">
 	<div class="displayCategory">
+		{% if not msg %}
+		{% else %}
+		<h6>{{ msg }}</h6>
+		{% endif %}
 		<h1>Welcome to CUHK-Shenzhen E-commerce </h1>
 		<h2>Shop by Category: </h2>
 		<ul>

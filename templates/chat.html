@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room </title>
+    <link rel="stylesheet" href={{ url_for('static', filename='css/topStyle.css') }} />
+
+</head>
+<body>
+    <div id="title">
+        <a href="/">
+            <img id="logo" src= {{ url_for('static', filename='images/logo.png') }} />
+        </a>
+        <form>
+            <input id="searchBox" type="text" name="searchQuery" value="{{query}}">
+            <input id="searchButton" type="submit" value="Search">
+        </form>
+    
+        {% if not loggedIn %}
+        <div id="signInButton">
+            <a class="link" href="/loginForm">Sign In</a>
+        </div>
+        {% else %}
+        <div class="dropdown">
+            <button class="dropbtn">Hello, <br>{{firstName}}</button>
+            <div class="dropdown-content">
+                <a href="/account/orders">Your orders</a>
+                <a href="/account/profile">Your profile</a>
+                {% if sellerStatus %}
+                <a href="/account/products">Your products</a>
+                <a href="/account/selling">Your sellings</a>
+                {% else %}
+                {% endif %}
+                <hr>
+                <a href="/logout">Sign Out</a>
+            </div>
+        </div>
+        {% endif %}
+        <div id="kart">
+            <a class="link" href="/cart">
+                <img src={{url_for('static', filename='images/shoppingCart.png')}} id="cartIcon" />
+                CART {{noOfItems}}
+            </a>
+        </div>
+    
+</div>
+    {% if not msg %}
+	{% else %}
+	<h6>{{ msg }}</h6>
+    {% endif %}
+    <h2>Chat Room</h2>
+    <h3>Buyer:{{ dict_name[chat_room_id[1]][0] }} {{ dict_name[chat_room_id[1]][1] }}</h3>
+    <h3>Seller:{{ dict_name[chat_room_id[2]][0] }} {{ dict_name[chat_room_id[2]][1] }}</h3>
+    <br>
+    <div id="chat-container">
+        {% for message in chat_history %}
+            <p><strong>{{ message[3] }} - {{ dict_name[message[2]][0] }} {{ dict_name[message[2]][1] }} :</strong> {{ message[4] }}</p>
+        {% endfor %}
+    </div>
+    <form id="message-form">
+        <input type="hidden" name="chat_room_id" value="{{ chat_room_id[0] }}">
+        <input type="hidden" name="sender_id" value="{{ senderId }}"> 
+        <input type="text" name="message" required>
+        <button type="submit">Send</button>
+    </form>
+    <script>
+        // Use JavaScript to handle form submission and update the chat in real-time
+        document.getElementById('message-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            // Fetch the form data
+            const formData = new FormData(event.target);
+
+            // Send a POST request to the server to handle the message
+            fetch('/send_message', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reload the chat history after sending a message
+                location.reload();
+            });
+        });
+    </script>
+</body>
+</html>

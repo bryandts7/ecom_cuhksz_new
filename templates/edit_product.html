@@ -5,6 +5,7 @@
 </head>
 <body>
 <h2>Edit items</h2>
+<h3> {{ data[1] }}</h3>
 <form action="/updateProduct" method="POST" enctype="multipart/form-data">
 	Name: <input type="text" name="name" value={{data[1]}}><br>
 	Price: <input type="text" name="price" value={{data[2]}}><br>

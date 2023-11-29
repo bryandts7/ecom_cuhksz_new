@@ -1,6 +1,7 @@
 from flask import *
 import sqlite3, hashlib, os
 from werkzeug.utils import secure_filename
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'random string'
@@ -57,6 +58,15 @@ def getSellerStatus():
         conn.close()
     return sellerStatus
 
+
+def insert_message(chat_room_id, sender_id, message):
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO chatHistory (chatRoomId, senderId, sendingTime, message) VALUES (?, ?, DATETIME('now', 'localtime'), ?)",
+                   (chat_room_id, sender_id, message))
+    conn.commit()
+    conn.close()
+
 # def getProductDetails():
 #     with sqlite3.connect('database.db') as conn:
 #         cur = conn.cursor()
@@ -80,6 +90,9 @@ def root():
     loggedIn, firstName, noOfItems = getLoginDetails()
     sellerStatus = getSellerStatus()
     query = request.args.get('searchQuery')
+    msg = request.args.get('msg')
+    if msg is None:
+        msg = False
     if query is None:
         with sqlite3.connect('database.db') as conn:
             cur = conn.cursor()
@@ -94,7 +107,7 @@ def root():
             cur.execute('SELECT categoryId, name FROM categories')
             categoryData = cur.fetchall()
         itemData = parse(itemData)   
-        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, sellerStatus=sellerStatus)
+        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, sellerStatus=sellerStatus, msg=msg)
     else:
         with sqlite3.connect('database.db') as conn:
             cur = conn.cursor()
@@ -109,7 +122,7 @@ def root():
             cur.execute('SELECT categoryId, name FROM categories')
             categoryData = cur.fetchall()
         itemData = parse(itemData)   
-        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, query=query, sellerStatus=sellerStatus)
+        return render_template('home.html', itemData=itemData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, categoryData=categoryData, query=query, sellerStatus=sellerStatus, msg=msg)
 
 @app.route("/registrationForm")
 def registrationForm():
@@ -271,13 +284,26 @@ def displayCategory():
 def productDescription():
     loggedIn, firstName, noOfItems = getLoginDetails()
     sellerStatus = getSellerStatus()
+    sameSeller = False
     productId = request.args.get('productId')
     with sqlite3.connect('database.db') as conn:
         cur = conn.cursor()
-        cur.execute('SELECT productId, name, price, description, image, stock FROM products WHERE productId = ?', (productId, ))
+        cur.execute('SELECT productId, name, price, description, image, stock, sellerId FROM products WHERE productId = ?', (productId, ))
         productData = cur.fetchone()
+        productSeller = productData[6]
+        cur.execute('SELECT firstName, lastName FROM users WHERE sellerId = ?', (productSeller,))
+        productSellerName = cur.fetchone()
+    if sellerStatus:
+        with sqlite3.connect('database.db') as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT userId, sellerId FROM users WHERE email = ?", (session['email'], ))
+            userId, sellerId= cur.fetchone()
+            if sellerId == productSeller:
+                sameSeller = True
+            else:
+                sameSeller = False
     conn.close()
-    return render_template("productDescription.html", data=productData, loggedIn = loggedIn, firstName = firstName, noOfItems = noOfItems, sellerStatus=sellerStatus)
+    return render_template("productDescription.html", data=productData, loggedIn = loggedIn, firstName = firstName, noOfItems = noOfItems, sellerStatus=sellerStatus, sameSeller=sameSeller, productSellerName=productSellerName)
 
 @app.route("/editProduct")
 def editProduct():
@@ -480,6 +506,273 @@ def seller():
     con.close()
     return render_template("profileHome.html", error = msg)
 
+@app.route("/addToCart")
+def addToCart():
+    if 'email' not in session:
+        return redirect(url_for('loginForm'))
+    else:
+        productId = int(request.args.get('productId'))
+        with sqlite3.connect('database.db') as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+            userId = cur.fetchone()[0]
+            cur.execute("SELECT * FROM cart WHERE userId = ? AND productId = ?", (userId, productId))
+            existingData = cur.fetchone()
+            if (existingData == None):
+                try:
+                    cur.execute("INSERT INTO cart (userId, productId, quantity) VALUES (?, ?, ?)", (userId, productId, 1))
+                    conn.commit()
+                    msg = "Added successfully"
+                except:
+                    conn.rollback()
+                    msg = "Error occured"
+            else:
+                quantity = existingData[2]
+                cur.execute("SELECT stock FROM products WHERE productId = ?", (productId,))
+                stock = cur.fetchone()[0]
+                if quantity < stock:
+                    try:
+                        cur.execute("UPDATE cart SET quantity = ? WHERE userId = ? AND productId = ?", (existingData[2]+1, userId, productId))
+                        conn.commit()
+                        msg = "Added successfully"
+                    except:
+                        conn.rollback()
+                        msg = "Error occured"
+                else:
+                    conn.commit()
+                    msg = "Cart reached maximum stock"
+
+        conn.close()
+        return redirect(url_for('root', msg=msg))
+
+@app.route("/cart")
+def cart():
+    if 'email' not in session:
+        return redirect(url_for('loginForm'))
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    email = session['email']
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
+        userId = cur.fetchone()[0]
+        cur.execute("SELECT products.productId, products.name, products.price, products.image, cart.quantity FROM products, cart WHERE products.productId = cart.productId AND cart.userId = ?", (userId, ))
+        products = cur.fetchall()
+    totalPrice = 0
+    for row in products:
+        totalPrice += row[2]*row[4]
+    return render_template("cart.html", products = products, totalPrice=totalPrice, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems)
+
+@app.route("/removeFromCart")
+def removeFromCart():
+    if 'email' not in session:
+        return redirect(url_for('loginForm'))
+    email = session['email']
+    productId = int(request.args.get('productId'))
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
+        userId = cur.fetchone()[0]
+        try:
+            cur.execute("DELETE FROM cart WHERE userId = ? AND productId = ?", (userId, productId))
+            conn.commit()
+            msg = "removed successfully"
+        except:
+            conn.rollback()
+            msg = "error occured"
+    conn.close()
+    return redirect(url_for('root'))
+
+@app.route("/checkout")
+def checkout():
+    email = session['email']
+    productId = int(request.args.get('productId'))
+    quantity = int(request.args.get('quantity'))
+    with sqlite3.connect('database.db') as conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT userId FROM users WHERE email = ?", (email, ))
+            customerId = cur.fetchone()[0]
+            cur.execute("INSERT INTO orders (customerId, productId, quantity, orderStatus, orderDate) VALUES (?, ?, ?, ?, ?)", (customerId, productId, quantity, "Unpaid", datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
+            cur.execute("DELETE FROM cart WHERE userId = ? AND productId = ?", (customerId, productId))
+            cur.execute("SELECT stock FROM products WHERE productId = ?", (productId,))
+            stock = cur.fetchone()[0]
+            cur.execute("UPDATE products SET stock = ? WHERE productId = ?", (stock - quantity, productId))
+            conn.commit()
+            msg = "Checkout Success, please see 'Your Order' page to pay your order."
+        except:
+            conn.rollback()
+            msg = "error occured"
+
+    return redirect(url_for('root', msg=msg))
+
+@app.route("/account/orders")
+def orders():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    msg = request.args.get("msg")
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+        userId = cur.fetchone()[0]
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Unpaid"))
+        unpaidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Paid"))
+        paidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Delivered"))
+        deliveredOrders = cur.fetchall()
+    return render_template("order.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders, msg=msg)
+
+@app.route("/payOrder")
+def payOrder():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT orders.orderId, orders.quantity, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.orderId = ?", (orderId, ))
+        data = cur.fetchone()
+    return render_template("paymentOrder.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, data=data)
+
+@app.route("/submitPayment", methods = ['GET', 'POST'])
+def submitPayment():
+    if request.method == 'POST':
+        #Parse form data    
+        orderId = int(request.form['orderId'])
+        proofPayment = request.files['proofPayment']
+        if proofPayment and allowed_file(proofPayment.filename):
+            filename = secure_filename(proofPayment.filename)
+            proofPayment.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        imagename = filename
+        
+    with sqlite3.connect('database.db') as con:
+        try:                    
+            cur = con.cursor()
+            cur.execute('INSERT INTO order_payment (status, paymentProof) VALUES (?, ?)', (1, imagename))
+            cur.execute('SELECT ordPayId FROM order_payment ORDER BY ordPayId DESC LIMIT 1')
+            ordPayId = cur.fetchone()[0]
+            cur.execute('UPDATE orders SET ordPayId = ?, orderStatus = ? WHERE orderId = ?', (ordPayId, "Paid", orderId))
+            con.commit()
+            msg = "You have successfully paid your order. Please contact the seller at 'Your Order' page."
+        except:
+            con.rollback()
+            msg = "Error occured"
+    con.close()
+    return redirect(url_for('root', msg=msg))
+
+@app.route("/contactSeller")
+def contactSeller():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    msg = request.args.get('msg')
+    with sqlite3.connect('database.db') as con:
+        cur = con.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+        customerId = cur.fetchone()[0]
+        cur.execute("SELECT productId FROM orders WHERE orderId = ?", (orderId,))
+        productId = cur.fetchone()[0]
+        cur.execute('SELECT sellerId FROM products WHERE productId = ?', (productId, ))
+        sellerId = cur.fetchone()[0]
+        cur.execute('SELECT userId FROM users WHERE sellerId = ?', (sellerId,))
+        sellerUserId = cur.fetchone()[0]
+        cur.execute('SELECT * FROM chatRoom WHERE customerUserId = ? AND sellerUserId = ? ', (customerId, sellerUserId))
+        chatRoomId = cur.fetchone()
+        if (chatRoomId is None):
+            try:
+                cur.execute("INSERT INTO chatRoom (customerUserId, sellerUserId) VALUES (?, ?)", (customerId, sellerUserId))
+                con.commit()
+                msg = "Chat Room created successfully. Please click 'Contact the Seller for Meet Up' again."
+            except:
+                con.rollback()
+                msg = "Error occured"
+            return redirect(url_for('contactSeller', orderId = orderId, msg=msg))
+        
+        else:
+            msg = False
+            cur.execute("SELECT * FROM chatHistory WHERE chatRoomId = ? ORDER BY sendingTime", (chatRoomId[0],))
+            chat_history = cur.fetchall()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (customerId,))
+            customerName = cur.fetchone()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (sellerUserId,))
+            sellerName = cur.fetchone()
+            dict_name = {
+                customerId: customerName,
+                sellerUserId: sellerName
+            }
+            cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+            senderId = cur.fetchone()[0]
+            return render_template('chat.html', chat_history=chat_history, chat_room_id=chatRoomId, msg=msg, dict_name=dict_name, senderId=senderId, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
+
+
+@app.route('/send_message', methods=['POST'])
+def send_message():
+    chat_room_id = request.form['chat_room_id']
+    sender_id = request.form['sender_id']
+    message = request.form['message']
+
+    insert_message(chat_room_id, sender_id, message)
+
+    # Return a JSON response indicating success
+    return jsonify({'status': 'success'})
+
+
+@app.route("/account/selling")
+def sellings():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    msg = request.args.get("msg")
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT sellerId FROM users WHERE email = ?", (session['email'], ))
+        sellerId = cur.fetchone()[0]
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND products.sellerId = ? AND orderStatus = ?", (sellerId, "Unpaid"))
+        unpaidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND products.sellerId = ? AND orderStatus = ?", (sellerId, "Paid"))
+        paidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND products.sellerId = ? AND orderStatus = ?", (sellerId, "Delivered"))
+        deliveredOrders = cur.fetchall()
+    return render_template("selling.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders, msg=msg)
+
+@app.route("/contactBuyer")
+def contactBuyer():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    msg = request.args.get('msg')
+    with sqlite3.connect('database.db') as con:
+        cur = con.cursor()
+        cur.execute("SELECT userId, sellerId FROM users WHERE email = ?", (session['email'], ))
+        sellerUserId, sellerId = cur.fetchone()
+        cur.execute("SELECT customerId, productId FROM orders WHERE orderId = ?", (orderId,))
+        customerId, productId = cur.fetchone()
+
+        cur.execute('SELECT * FROM chatRoom WHERE customerUserId = ? AND sellerUserId = ? ', (customerId, sellerUserId))
+        chatRoomId = cur.fetchone()
+        if (chatRoomId is None):
+            try:
+                cur.execute("INSERT INTO chatRoom (customerUserId, sellerUserId) VALUES (?, ?)", (customerId, sellerUserId))
+                con.commit()
+                msg = "Chat Room created successfully. Please click 'Contact the Buyer for Meet Up' again."
+            except:
+                con.rollback()
+                msg = "Error occured"
+            return redirect(url_for('contactBuyer', orderId = orderId, msg=msg))
+        
+        else:
+            msg = False
+            cur.execute("SELECT * FROM chatHistory WHERE chatRoomId = ? ORDER BY sendingTime", (chatRoomId[0],))
+            chat_history = cur.fetchall()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (customerId,))
+            customerName = cur.fetchone()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (sellerUserId,))
+            sellerName = cur.fetchone()
+            dict_name = {
+                customerId: customerName,
+                sellerUserId: sellerName
+            }
+            cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+            senderId = cur.fetchone()[0]
+            return render_template('chat.html', chat_history=chat_history, chat_room_id=chatRoomId, msg=msg, dict_name=dict_name, senderId=senderId, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
 
 
 if __name__ == '__main__':

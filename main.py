@@ -774,6 +774,42 @@ def contactBuyer():
             senderId = cur.fetchone()[0]
             return render_template('chat.html', chat_history=chat_history, chat_room_id=chatRoomId, msg=msg, dict_name=dict_name, senderId=senderId, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
 
+@app.route("/confirmDelivery")
+def confirmDelivery():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT orders.orderId, orders.quantity, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.orderId = ?", (orderId, ))
+        data = cur.fetchone()
+    return render_template("confirmDelivery.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, data=data)
+
+@app.route("/submitDelivery", methods = ['GET', 'POST'])
+def submitDelivery():
+    if request.method == 'POST':
+        #Parse form data    
+        orderId = int(request.form['orderId'])
+        proofDelivery = request.files['proofDelivery']
+        if proofDelivery and allowed_file(proofDelivery.filename):
+            filename = secure_filename(proofDelivery.filename)
+            proofDelivery.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        imagename = filename
+        
+    with sqlite3.connect('database.db') as con:
+        try:                    
+            cur = con.cursor()
+            cur.execute('INSERT INTO order_delivery (status, deliveryProof) VALUES (?, ?)', (1, imagename))
+            cur.execute('SELECT ordPayId FROM order_payment ORDER BY ordPayId DESC LIMIT 1')
+            ordDelId = cur.fetchone()[0]
+            cur.execute('UPDATE orders SET ordDelId = ?, orderStatus = ? WHERE orderId = ?', (ordDelId, "Delivered", orderId))
+            con.commit()
+            msg = "You have successfully finished your order delivery."
+        except:
+            con.rollback()
+            msg = "Error occured"
+    con.close()
+    return redirect(url_for('root', msg=msg))
 
 if __name__ == '__main__':
     app.run(debug=True)

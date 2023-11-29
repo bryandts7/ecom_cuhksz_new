@@ -62,7 +62,7 @@
 				{% for row in unpaidOrders %}
 				<td>
 					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" /> <br>
-					<a href="/payOrder?orderId={{row[0]}}"><h4 >Pay Order</h4></a>
+					<a href="/payOrder?orderId={{row[0]}}"><button class="btn btn-primary"  type="button" >Pay Order</button></a>
 				</td>
 				{% endfor %}
 			</tr>
@@ -98,6 +98,35 @@
 			</tr>
 			<tr id="productPrice">
 				{% for row in paidOrders %}
+				<td>
+					Quantity :{{row[2]}} <br>
+                    Total Price: ¥{{row[2]*row[5]}} ({{row[5]}}/pcs)
+				</td>
+
+				{% endfor %}
+			</tr>
+		</table>
+	</div>
+
+	<div>
+		<h2>Delivered (Finished) Orders</h2>
+		<table>
+			<tr id="productName">
+				{% for row in deliveredOrders %}
+				<td>
+					{{row[4]}}
+				</td>
+				{% endfor %}
+			</tr>
+			<tr id="productImage">
+				{% for row in deliveredOrders %}
+				<td>
+					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" />
+				</td>
+				{% endfor %}
+			</tr>
+			<tr id="productPrice">
+				{% for row in deliveredOrders %}
 				<td>
 					Quantity :{{row[2]}} <br>
                     Total Price: ¥{{row[2]*row[5]}} ({{row[5]}}/pcs)

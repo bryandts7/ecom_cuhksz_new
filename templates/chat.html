@@ -51,8 +51,8 @@
 	<h6>{{ msg }}</h6>
     {% endif %}
     <h2>Chat Room</h2>
-    <h3>Buyer:{{ dict_name[chat_room_id[1]][0] }} {{ dict_name[chat_room_id[1]][1] }}</h3>
-    <h3>Seller:{{ dict_name[chat_room_id[2]][0] }} {{ dict_name[chat_room_id[2]][1] }}</h3>
+    <h3>Buyer: {{ dict_name[chat_room_id[1]][0] }} {{ dict_name[chat_room_id[1]][1] }}</h3>
+    <h3>Seller: {{ dict_name[chat_room_id[2]][0] }} {{ dict_name[chat_room_id[2]][1] }}</h3>
     <br>
     <div id="chat-container">
         {% for message in chat_history %}

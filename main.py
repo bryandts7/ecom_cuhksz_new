@@ -58,6 +58,15 @@ def getSellerStatus():
         conn.close()
     return sellerStatus
 
+
+def insert_message(chat_room_id, sender_id, message):
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO chatHistory (chatRoomId, senderId, sendingTime, message) VALUES (?, ?, DATETIME('now', 'localtime'), ?)",
+                   (chat_room_id, sender_id, message))
+    conn.commit()
+    conn.close()
+
 # def getProductDetails():
 #     with sqlite3.connect('database.db') as conn:
 #         cur = conn.cursor()
@@ -553,6 +562,7 @@ def checkout():
 def orders():
     loggedIn, firstName, noOfItems = getLoginDetails()
     sellerStatus = getSellerStatus()
+    msg = request.args.get("msg")
     with sqlite3.connect('database.db') as conn:
         cur = conn.cursor()
         cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
@@ -563,7 +573,7 @@ def orders():
         paidOrders = cur.fetchall()
         cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND orders.customerId = ? AND orderStatus = ?", (userId, "Delivered"))
         deliveredOrders = cur.fetchall()
-    return render_template("order.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders)
+    return render_template("order.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders, msg=msg)
 
 @app.route("/payOrder")
 def payOrder():
@@ -601,6 +611,121 @@ def submitPayment():
             msg = "Error occured"
     con.close()
     return redirect(url_for('root', msg=msg))
+
+@app.route("/contactSeller")
+def contactSeller():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    msg = request.args.get('msg')
+    with sqlite3.connect('database.db') as con:
+        cur = con.cursor()
+        cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+        customerId = cur.fetchone()[0]
+        cur.execute("SELECT productId FROM orders WHERE orderId = ?", (orderId,))
+        productId = cur.fetchone()[0]
+        cur.execute('SELECT sellerId FROM products WHERE productId = ?', (productId, ))
+        sellerId = cur.fetchone()[0]
+        cur.execute('SELECT userId FROM users WHERE sellerId = ?', (sellerId,))
+        sellerUserId = cur.fetchone()[0]
+        cur.execute('SELECT * FROM chatRoom WHERE customerUserId = ? AND sellerUserId = ? ', (customerId, sellerUserId))
+        chatRoomId = cur.fetchone()
+        if (chatRoomId is None):
+            try:
+                cur.execute("INSERT INTO chatRoom (customerUserId, sellerUserId) VALUES (?, ?)", (customerId, sellerUserId))
+                con.commit()
+                msg = "Chat Room created successfully. Please click 'Contact the Seller for Meet Up' again."
+            except:
+                con.rollback()
+                msg = "Error occured"
+            return redirect(url_for('contactSeller', orderId = orderId, msg=msg))
+        
+        else:
+            msg = False
+            cur.execute("SELECT * FROM chatHistory WHERE chatRoomId = ? ORDER BY sendingTime", (chatRoomId[0],))
+            chat_history = cur.fetchall()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (customerId,))
+            customerName = cur.fetchone()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (sellerUserId,))
+            sellerName = cur.fetchone()
+            dict_name = {
+                customerId: customerName,
+                sellerUserId: sellerName
+            }
+            cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+            senderId = cur.fetchone()[0]
+            return render_template('chat.html', chat_history=chat_history, chat_room_id=chatRoomId, msg=msg, dict_name=dict_name, senderId=senderId, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
+
+
+@app.route('/send_message', methods=['POST'])
+def send_message():
+    chat_room_id = request.form['chat_room_id']
+    sender_id = request.form['sender_id']
+    message = request.form['message']
+
+    insert_message(chat_room_id, sender_id, message)
+
+    # Return a JSON response indicating success
+    return jsonify({'status': 'success'})
+
+
+@app.route("/account/selling")
+def sellings():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    msg = request.args.get("msg")
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT sellerId FROM users WHERE email = ?", (session['email'], ))
+        sellerId = cur.fetchone()[0]
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND products.sellerId = ? AND orderStatus = ?", (sellerId, "Unpaid"))
+        unpaidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND products.sellerId = ? AND orderStatus = ?", (sellerId, "Paid"))
+        paidOrders = cur.fetchall()
+        cur.execute("SELECT orders.orderId, orders.productId, orders.quantity, products.image, products.name, products.price FROM orders, products WHERE orders.productId = products.productId AND products.sellerId = ? AND orderStatus = ?", (sellerId, "Delivered"))
+        deliveredOrders = cur.fetchall()
+    return render_template("selling.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus, unpaidOrders=unpaidOrders, paidOrders=paidOrders, deliveredOrders=deliveredOrders, msg=msg)
+
+@app.route("/contactBuyer")
+def contactBuyer():
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    orderId = int(request.args.get('orderId'))
+    msg = request.args.get('msg')
+    with sqlite3.connect('database.db') as con:
+        cur = con.cursor()
+        cur.execute("SELECT userId, sellerId FROM users WHERE email = ?", (session['email'], ))
+        sellerUserId, sellerId = cur.fetchone()
+        cur.execute("SELECT customerId, productId FROM orders WHERE orderId = ?", (orderId,))
+        customerId, productId = cur.fetchone()
+
+        cur.execute('SELECT * FROM chatRoom WHERE customerUserId = ? AND sellerUserId = ? ', (customerId, sellerUserId))
+        chatRoomId = cur.fetchone()
+        if (chatRoomId is None):
+            try:
+                cur.execute("INSERT INTO chatRoom (customerUserId, sellerUserId) VALUES (?, ?)", (customerId, sellerUserId))
+                con.commit()
+                msg = "Chat Room created successfully. Please click 'Contact the Buyer for Meet Up' again."
+            except:
+                con.rollback()
+                msg = "Error occured"
+            return redirect(url_for('contactBuyer', orderId = orderId, msg=msg))
+        
+        else:
+            msg = False
+            cur.execute("SELECT * FROM chatHistory WHERE chatRoomId = ? ORDER BY sendingTime", (chatRoomId[0],))
+            chat_history = cur.fetchall()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (customerId,))
+            customerName = cur.fetchone()
+            cur.execute("SELECT firstName, lastName FROM users WHERE userId = ?", (sellerUserId,))
+            sellerName = cur.fetchone()
+            dict_name = {
+                customerId: customerName,
+                sellerUserId: sellerName
+            }
+            cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
+            senderId = cur.fetchone()[0]
+            return render_template('chat.html', chat_history=chat_history, chat_room_id=chatRoomId, msg=msg, dict_name=dict_name, senderId=senderId, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
 
 
 

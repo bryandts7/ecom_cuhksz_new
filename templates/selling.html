@@ -1,7 +1,7 @@
 <!DOCTYPE HTML>
 <html>
 <head>
-<title>Your Order</title>
+<title>Your Sellings</title>
 <link rel="stylesheet" href={{ url_for('static', filename='css/home.css') }} />
 <link rel="stylesheet" href={{ url_for('static', filename='css/topStyle.css') }} />
 </head>
@@ -46,10 +46,10 @@
 <div class="display">
 	<h4>{{ msg }}</h4>
 	<div class="displayCategory">
-		<h1>Your Orders: </h1>
+		<h1>Your Sellings: </h1>
 	</div>
 	<div>
-		<h2>Unpaid Orders</h2>
+		<h2>Unpaid Orders by Buyer</h2>
 		<table>
 			<tr id="productName">
 				{% for row in unpaidOrders %}
@@ -62,7 +62,6 @@
 				{% for row in unpaidOrders %}
 				<td>
 					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" /> <br>
-					<a href="/payOrder?orderId={{row[0]}}"><h4 >Pay Order</h4></a>
 				</td>
 				{% endfor %}
 			</tr>
@@ -79,7 +78,7 @@
 	</div>
 
     <div>
-		<h2>Paid Orders</h2>
+		<h2>Paid Orders by Buyer</h2>
 		<table>
 			<tr id="productName">
 				{% for row in paidOrders %}
@@ -92,7 +91,7 @@
 				{% for row in paidOrders %}
 				<td>
 					<img src={{url_for('static', filename='uploads/' + row[3])}} id="itemImage" />
-					<a href="/contactSeller?orderId={{row[0]}}"><h6>Contact the Seller for Meet Up</h6></a>
+					<a href="/contactBuyer?orderId={{row[0]}}"><h6>Contact the Buyer for Meet Up</h6></a>
 				</td>
 				{% endfor %}
 			</tr>

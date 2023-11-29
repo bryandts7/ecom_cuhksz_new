@@ -390,6 +390,24 @@ def profileHome():
     sellerStatus = getSellerStatus()
     return render_template("profileHome.html", loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
 
+@app.route("/account/profile/view")
+def view():
+    if 'email' not in session:
+        return redirect(url_for('root'))
+    loggedIn, firstName, noOfItems = getLoginDetails()
+    sellerStatus = getSellerStatus()
+    with sqlite3.connect('database.db') as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT userId, email, firstName, lastName, addressBuilding, phone, weChatId FROM users WHERE email = ?", (session['email'], ))
+        profileData = cur.fetchone()
+        userId = profileData[0]
+        cur.execute('SELECT addressBuilding FROM address')
+        collegeBuildingData = cur.fetchall()
+
+    conn.close()
+    return render_template("viewProfile.html", profileData=profileData, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, collegeBuildingData=collegeBuildingData, sellerStatus=sellerStatus)
+
+
 @app.route("/account/profile/edit")
 def editProfile():
     if 'email' not in session:
@@ -458,6 +476,35 @@ def updateProfile():
                     msg = "Error occured"
         con.close()
         return redirect(url_for('editProfile'))
+
+@app.route("/sellerForm") 
+def sellerForm():
+    return render_template("seller.html")
+
+@app.route("/seller", methods = ['GET', 'POST'])
+def seller():
+    if request.method == 'POST':
+        weChatPayCodeImg = request.files['payCodeImage']
+        if weChatPayCodeImg and allowed_file(weChatPayCodeImg.filename):
+            filename = secure_filename(weChatPayCodeImg.filename)
+            weChatPayCodeImg.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        imagename = filename
+        
+    with sqlite3.connect('database.db') as con:
+        try:                     
+            cur = con.cursor()
+            cur.execute('INSERT INTO seller (weChatPayCode) VALUES (?)', (imagename,))
+            cur.execute('SELECT * FROM seller ORDER BY sellerId DESC LIMIT 1')
+            sellerId = cur.fetchone()
+            cur.execute('INSERT INTO users (sellerId) VALUES (?)', (sellerId[0],))
+            con.commit()
+
+            msg = "Registered Successfully"
+        except:
+            con.rollback()
+            msg = "Error Occured"
+    con.close()
+    return render_template("profileHome.html", error = msg)
 
 @app.route("/addToCart")
 def addToCart():
@@ -726,7 +773,6 @@ def contactBuyer():
             cur.execute("SELECT userId FROM users WHERE email = ?", (session['email'], ))
             senderId = cur.fetchone()[0]
             return render_template('chat.html', chat_history=chat_history, chat_room_id=chatRoomId, msg=msg, dict_name=dict_name, senderId=senderId, loggedIn=loggedIn, firstName=firstName, noOfItems=noOfItems, sellerStatus=sellerStatus)
-
 
 
 if __name__ == '__main__':
